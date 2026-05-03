@@ -8,6 +8,8 @@ import 'katex/dist/katex.min.css';
 import { saveAs } from 'file-saver';
 import MathEditor from './components/MathEditor';
 import { generateDocx, ExportConfig } from './utils/MarkdownToDocx';
+import AuthModal from './components/AuthModal';
+import { authService } from './utils/auth';
 import './App.css';
 
 const FONT_SIZES = [
@@ -107,6 +109,8 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
 4. **公式可编辑** (Word 原生公式对象)`);
   const [showAbout, setShowAbout] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalMessage, setAuthModalMessage] = useState('');
   const [isConverting, setIsConverting] = useState(false);
   
   const [exportConfig, setExportConfig] = useState<ExportConfig>({
@@ -129,8 +133,25 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
   };
 
   const handleDownload = async () => {
+    const token = authService.getToken();
+    if (!token) {
+      setAuthModalMessage('请先登录或注册以使用下载功能');
+      setShowAuthModal(true);
+      return;
+    }
+
     setIsConverting(true);
     try {
+      const permission = await authService.checkPermission();
+      if (!permission.allowed) {
+        alert('您的会员已过期或无效，请重新验证');
+        authService.clearToken();
+        setAuthModalMessage('您的会员已过期或无效，请重新登录');
+        setShowAuthModal(true);
+        setIsConverting(false);
+        return;
+      }
+
       const blob = await generateDocx(markdown, exportConfig);
       saveAs(blob, 'translated_document.docx');
     } catch (error) {
@@ -262,6 +283,14 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
             <button onClick={() => setShowAbout(false)}>关闭</button>
           </div>
         </div>
+      )}
+
+      {showAuthModal && (
+        <AuthModal 
+          onClose={() => setShowAuthModal(false)} 
+          onSuccess={() => handleDownload()} 
+          initialMessage={authModalMessage}
+        />
       )}
 
       <main className="main-content">
