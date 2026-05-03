@@ -460,7 +460,9 @@ function walkNode(node: Element | null): any[] {
             if (!base || !sub || !sup) return walkChildren(children);
             
             // Check if base is an operator (integral, sum) to use MathNary
-            const baseText = base.textContent || "";
+            // Extract text from base even if it is nested (e.g. <mrow><mo>∫</mo></mrow>)
+            const baseText = extractText(base) || "";
+            
             if (isIntegral(baseText)) {
                 return [new MathNary({
                     char: baseText,
@@ -535,7 +537,7 @@ function walkNode(node: Element | null): any[] {
             const [base, under, over] = children;
             if (!base || !under || !over) return walkChildren(children);
             
-            const baseText = base.textContent || "";
+            const baseText = extractText(base) || "";
             
             if (isIntegral(baseText)) {
                  return [new MathNary({
@@ -600,6 +602,10 @@ function walkChildren(children: Element[]): any[] {
         result = result.concat(walkNode(child));
     }
     return result;
+}
+
+function extractText(node: Element): string {
+    return node.textContent || "";
 }
 
 function isIntegral(text: string): boolean {

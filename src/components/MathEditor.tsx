@@ -41,7 +41,7 @@ const MathEditor: React.FC<MathEditorProps> = ({ onInsert }) => {
     <div className="math-editor-container">
       <label>数学公式编辑器 (MathLive)</label>
       <div className="math-field-wrapper">
-        <math-field ref={mfRef} style={{ width: '100%', padding: '8px', border: '1px solid #444', borderRadius: '4px' }}>
+        <math-field ref={mfRef} className="math-field-custom">
           {value}
         </math-field>
       </div>
