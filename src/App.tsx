@@ -10,6 +10,7 @@ import MathEditor from './components/MathEditor';
 import { generateDocx, ExportConfig } from './utils/MarkdownToDocx';
 import AuthModal from './components/AuthModal';
 import { authService } from './utils/auth';
+import { normalizeMarkdown } from './utils/textUtils';
 import './App.css';
 
 const FONT_SIZES = [
@@ -115,11 +116,13 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
   
   const [exportConfig, setExportConfig] = useState<ExportConfig>({
     mainFont: {
-      ascii: "Times New Roman",
-      eastAsia: "SimSun", // 宋体
+      ascii: 'Times New Roman',
+      eastAsia: 'SimSun' // 宋体
     },
+    mathFont: 'Times New Roman',
+    mathFontSize: 12,
     lineSpacing: 1.5,
-    fontSize: 12,
+    fontSize: 12
   });
 
   const handleInsertMath = (latex: string) => {
@@ -212,24 +215,54 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
               </select>
             </div>
             
-            <div className="config-section">
-              <label>英文字体</label>
-              <select 
-                value={exportConfig.mainFont.ascii}
-                onChange={(e) => setExportConfig({
-                  ...exportConfig,
-                  mainFont: { ...exportConfig.mainFont, ascii: e.target.value }
-                })}
-              >
-                <option value="Times New Roman">Times New Roman</option>
-                <option value="Arial">Arial</option>
-                <option value="Calibri">Calibri</option>
-                <option value="Helvetica">Helvetica</option>
-              </select>
-            </div>
+            <div className="setting-item">
+                <label>英文字体：</label>
+                <select 
+                  value={exportConfig.mainFont.ascii}
+                  onChange={(e) => setExportConfig({
+                    ...exportConfig,
+                    mainFont: { ...exportConfig.mainFont, ascii: e.target.value }
+                  })}
+                >
+                  <option value="Times New Roman">Times New Roman</option>
+                  <option value="Arial">Arial</option>
+                  <option value="Calibri">Calibri</option>
+                </select>
+              </div>
 
-            <div className="config-section">
-              <label>行间距</label>
+              <div className="setting-item">
+                <label>公式字体：</label>
+                <select 
+                  value={exportConfig.mathFont}
+                  onChange={(e) => setExportConfig({
+                    ...exportConfig,
+                    mathFont: e.target.value
+                  })}
+                >
+                  <option value="Times New Roman">Times New Roman (推荐)</option>
+                  <option value="Cambria Math">Cambria Math (默认)</option>
+                  <option value="XITS Math">XITS Math</option>
+                  <option value="Latin Modern Math">Latin Modern Math</option>
+                </select>
+              </div>
+
+              <div className="setting-item">
+                <label>公式字号(pt)：</label>
+                <input 
+                  type="number" 
+                  value={exportConfig.mathFontSize}
+                  onChange={(e) => setExportConfig({
+                    ...exportConfig,
+                    mathFontSize: Number(e.target.value)
+                  })}
+                  min="8"
+                  max="72"
+                  step="0.5"
+                />
+              </div>
+
+              <div className="setting-item">
+                <label>行距：</label>
               <select 
                 value={exportConfig.lineSpacing}
                 onChange={(e) => setExportConfig({
@@ -320,7 +353,7 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
               remarkPlugins={[remarkMath, remarkGfm]}
               rehypePlugins={[rehypeKatex, rehypeRaw]}
             >
-              {markdown}
+              {normalizeMarkdown(markdown)}
             </ReactMarkdown>
           </div>
         </div>

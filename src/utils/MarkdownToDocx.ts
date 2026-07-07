@@ -13,41 +13,11 @@ import {
     WidthType,
     convertInchesToTwip,
 } from "docx";
-import { convertLatexToMath } from "./DocxMathConverter";
+import { convertLatexToMath, MathParagraph, globalMathConfig } from "./DocxMathConverter";
+import { normalizeMarkdown } from "./textUtils";
 
 // Helper to normalize AI/User input for better compatibility
-export function normalizeMarkdown(markdown: string): string {
-    if (!markdown) return "";
-    
-    let normalized = markdown;
 
-    // 0. Mobile compatibility: Convert full-width chars to half-width
-    // e.g., ＄ -> $, （ -> (, ） -> )
-    normalized = normalized.replace(/[\uff01-\uff5e]/g, function(ch) {
-        return String.fromCharCode(ch.charCodeAt(0) - 0xfee0);
-    }).replace(/\u3000/g, ' ');
-
-    // 1. Convert LaTeX-style inline math \( ... \) to $ ... $
-    normalized = normalized.replace(/\\\((.*?)\\\)/g, '$$$1$$');
-
-    // 2. Convert LaTeX-style display math \[ ... \] to $$ ... $$
-    normalized = normalized.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
-
-    // 3. Ensure $$ ... $$ display math is properly spaced (on new lines)
-    normalized = normalized.replace(/\$\$([\s\S]*?)\$\$/g, (_, content) => {
-        return `\n\n$$\n${content.trim()}\n$$\n\n`;
-    });
-
-    // 4. Fix for "math treated as code block due to indentation"
-    normalized = normalized.replace(/^( +|\t+)(?=.*\$)/gm, (match) => {
-        if (match.includes('\t') || match.length >= 4) {
-             return match.replace(/ /g, '\u00A0').replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0');
-        }
-        return match;
-    });
-
-    return normalized;
-}
 
 export const FONT_SIZES = [
     { label: '初号 (42pt)', value: 42 },
@@ -69,6 +39,8 @@ export interface ExportConfig {
         ascii: string;    // English font
         eastAsia: string; // Chinese font
     };
+    mathFont: string;     // Math font (e.g. Times New Roman, Cambria Math)
+    mathFontSize: number; // Math font size
     lineSpacing: number; // Multiplier (e.g., 1.5)
     fontSize: number;    // Point size (e.g., 12)
 }
@@ -79,10 +51,16 @@ export async function generateDocx(markdown: string, config?: Partial<ExportConf
     // Default Settings
     const defaultConfig: ExportConfig = {
         mainFont: { ascii: "Times New Roman", eastAsia: "SimSun" },
+        mathFont: "Times New Roman",
+        mathFontSize: 12,
         lineSpacing: 1.5,
         fontSize: 12
     };
     const finalConfig = { ...defaultConfig, ...config };
+
+    // Set global math config for DocxMathConverter
+    globalMathConfig.fontName = finalConfig.mathFont;
+    globalMathConfig.fontSize = finalConfig.mathFontSize;
 
     // 240 twips = 1 line (single spacing). But in docx, line rule "auto" takes 240 as 100% (1 line).
     // Actually, "auto" means 240 = 1 line. So 360 = 1.5 lines.
@@ -384,9 +362,13 @@ function parseMarkdown(markdown: string, config: ExportConfig): any[] {
 
             if (mathContent.trim()) {
                 const mathNodes = convertLatexToMath(mathContent.trim(), true);
+                
+                // We must use m:oMathPara for block math to ensure compatibility with WPS Office
+                // and strict OMML parsers.
+                
                 children.push(new Paragraph({
                     alignment: AlignmentType.CENTER,
-                    children: [new DocxMath({ children: mathNodes })],
+                    children: [new MathParagraph(mathNodes)],
                     spacing: { before: 240, after: 240 }
                 }));
             }

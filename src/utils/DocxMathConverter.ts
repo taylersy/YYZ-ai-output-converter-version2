@@ -15,16 +15,99 @@ import katex from "katex";
 // --- Constants ---
 // const STOP_CHARS = ["=", "<", ">", "\u2264", "\u2265", "\u2248", "\u2192", ","];
 
-// --- Custom Components for Missing Features ---
+export const globalMathConfig = {
+    fontName: "Cambria Math",
+    fontSize: 12
+};
 
-class ExtendedMathRun extends MathRun {
+class ExtendedMathRun extends XmlComponent {
     public readonly textContent: string;
     public readonly isOperator: boolean;
-    constructor(text: string, isOperator: boolean = false) {
-        super(text);
+    constructor(text: string, isOperator: boolean = false, isNormalText: boolean = false) {
+        super("m:r");
         this.textContent = text;
         this.isOperator = isOperator;
+
+        const wRPr = new GenericXmlComponent("w:rPr");
+        
+        const fonts = new GenericXmlComponent("w:rFonts");
+        fonts.addChild({
+            _attr: {
+                "w:ascii": globalMathConfig.fontName,
+                "w:hAnsi": globalMathConfig.fontName,
+                "w:cs": globalMathConfig.fontName,
+                "w:eastAsia": globalMathConfig.fontName
+            }
+        });
+        wRPr.addChild(fonts);
+
+        const szVal = Math.round(globalMathConfig.fontSize * 2).toString();
+        const sz = new GenericXmlComponent("w:sz");
+        sz.addChild({ _attr: { "w:val": szVal } });
+        const szCs = new GenericXmlComponent("w:szCs");
+        szCs.addChild({ _attr: { "w:val": szVal } });
+        wRPr.addChild(sz);
+        wRPr.addChild(szCs);
+
+        if (isNormalText) {
+            const iOff = new GenericXmlComponent("w:i");
+            iOff.addChild({ _attr: { "w:val": "0" } });
+            wRPr.addChild(iOff);
+        } else if (!isOperator && text.length === 1 && /[a-zA-Z]/.test(text)) {
+            wRPr.addChild(new GenericXmlComponent("w:i"));
+        }
+
+        // w:rPr is a direct child of m:r in OMML!
+        this.root.push(wRPr);
+
+        if (isNormalText) {
+            const mRPr = new GenericXmlComponent("m:rPr");
+            mRPr.addChild(new GenericXmlComponent("m:nor"));
+            this.root.push(mRPr);
+        }
+
+        const t = new GenericXmlComponent("m:t");
+        t.addChild({ _attr: { "xml:space": "preserve" } });
+        t.addChild(text);
+        this.root.push(t);
     }
+}
+
+function applyCtrlPr(component: any, propTagName: string) {
+    const ctrlPr = new GenericXmlComponent("m:ctrlPr");
+    const rPr = new GenericXmlComponent("w:rPr");
+    
+    const fonts = new GenericXmlComponent("w:rFonts");
+    fonts.addChild({
+        _attr: {
+            "w:ascii": globalMathConfig.fontName,
+            "w:hAnsi": globalMathConfig.fontName,
+            "w:cs": globalMathConfig.fontName,
+            "w:eastAsia": globalMathConfig.fontName
+        }
+    });
+    rPr.addChild(fonts);
+
+    const szVal = Math.round(globalMathConfig.fontSize * 2).toString();
+    const sz = new GenericXmlComponent("w:sz");
+    sz.addChild({ _attr: { "w:val": szVal } });
+    const szCs = new GenericXmlComponent("w:szCs");
+    szCs.addChild({ _attr: { "w:val": szVal } });
+    rPr.addChild(sz);
+    rPr.addChild(szCs);
+
+    ctrlPr.addChild(rPr);
+
+    const root = component.root;
+    if (root && Array.isArray(root)) {
+        let propNode = root.find((child: any) => child.rootKey === propTagName);
+        if (!propNode) {
+            propNode = new GenericXmlComponent(propTagName);
+            root.unshift(propNode);
+        }
+        propNode.addChild ? propNode.addChild(ctrlPr) : propNode.root.push(ctrlPr);
+    }
+    return component;
 }
 
 class MathValAttribute extends XmlAttributeComponent<{ val: string }> {
@@ -89,17 +172,13 @@ class MathMatrixProperties extends XmlComponent {
         //       <m:mcJc m:val="center"/>
         //     </m:mcPr>
         //   </m:mc>
-        // </m:mcs>
-        
         const mcs = new GenericXmlComponent("m:mcs");
         const mc = new GenericXmlComponent("m:mc");
         const mcPr = new GenericXmlComponent("m:mcPr");
         
-        // Column count: 1 (Word repeats the last column definition for remaining columns)
         const count = new GenericXmlComponent("m:count");
         count.addChild(new MathValAttribute({ val: "1" }));
         
-        // Alignment: center (Fixes alignment issues in determinants/matrices)
         const jc = new GenericXmlComponent("m:mcJc");
         jc.addChild(new MathValAttribute({ val: "center" }));
         
@@ -124,6 +203,22 @@ class MathMatrix extends XmlComponent {
         super("m:m");
         this.root.push(new MathMatrixProperties());
         rows.forEach(row => this.root.push(row));
+        applyCtrlPr(this, "m:mPr");
+    }
+}
+
+class MathEqArr extends XmlComponent {
+    constructor(rows: MathEqArrRow[]) {
+        super("m:eqArr");
+        rows.forEach(row => this.root.push(row));
+        applyCtrlPr(this, "m:eqArrPr");
+    }
+}
+
+class MathEqArrRow extends XmlComponent {
+    constructor(children: any[]) {
+        super("m:e");
+        children.forEach(child => this.root.push(child));
     }
 }
 
@@ -132,7 +227,7 @@ class MathMatrix extends XmlComponent {
 class MathNaryProperties extends XmlComponent {
     constructor(chr: string, limitLocation?: "subSup" | "undOvr") {
         super("m:naryPr");
-        this.root.push(new MathAccentChar(chr)); // Reuse MathAccentChar for m:chr
+        this.root.push(new MathAccentChar(chr));
         
         if (limitLocation) {
             const limLoc = new GenericXmlComponent("m:limLoc");
@@ -173,11 +268,11 @@ class MathNary extends XmlComponent {
             options.children.forEach(child => this.element.addChild(child));
             this.hasContent = true;
         } else {
-            // Add zero-width space to hide placeholder box
             this.element.addChild(new MathRun("\u200B"));
             this.hasContent = false;
         }
         this.root.push(this.element);
+        applyCtrlPr(this, "m:naryPr");
     }
 
     public appendChildToBody(child: any) {
@@ -205,8 +300,6 @@ class MathDelimiterChar extends XmlComponent {
 class MathDelimiterProperties extends XmlComponent {
     constructor(begChr: string, endChr: string) {
         super("m:dPr");
-        // Only add if not default? Defaults are usually ( and )
-        // But for safety we always add
         this.root.push(new MathDelimiterChar("m:begChr", begChr));
         this.root.push(new MathDelimiterChar("m:endChr", endChr));
     }
@@ -216,8 +309,17 @@ class MathDelimiter extends XmlComponent {
     constructor(children: any[], begChr: string = "(", endChr: string = ")") {
         super("m:d");
         this.root.push(new MathDelimiterProperties(begChr, endChr));
-        // m:d requires content wrapped in m:e
         this.root.push(new MathElement(children));
+        applyCtrlPr(this, "m:dPr");
+    }
+}
+
+export class MathParagraph extends XmlComponent {
+    constructor(children: any[]) {
+        super("m:oMathPara");
+        const oMath = new GenericXmlComponent("m:oMath");
+        children.forEach(child => oMath.addChild(child));
+        this.root.push(oMath);
     }
 }
 
@@ -239,10 +341,9 @@ export function mathmlToDocx(mathml: string): any[] {
     const semantics = mathNode.querySelector("semantics");
     let root: Element = semantics ? semantics : mathNode;
     
-    // If semantics exists, use its first child (usually mrow or the expression)
     if (semantics) {
         const annotation = semantics.querySelector("annotation");
-        if (annotation) annotation.remove(); // Remove annotations
+        if (annotation) annotation.remove(); 
         root = semantics.firstElementChild || semantics;
     }
 
@@ -252,7 +353,6 @@ export function mathmlToDocx(mathml: string): any[] {
 function walkNode(node: Element | null): any[] {
     if (!node) return [];
     
-    // Defensive check: Ensure node is an Element with a tagName
     if (!node.tagName) return [];
 
     const tagName = node.tagName.toLowerCase();
@@ -264,12 +364,6 @@ function walkNode(node: Element | null): any[] {
             return walkChildren(children);
 
         case "mrow": {
-            // Advanced fence handling with stack to support:
-            // 1. cases: { ... (no close)
-            // 2. P(A|B): P, (, A, |, B, ) (P outside)
-            // 3. (a) + (b): Separate delimiters
-            // 4. Nested: ( a + ( b ) )
-
             const result: any[] = [];
             let stack: { startNode: Element, children: any[], openChar: string }[] = [];
 
@@ -279,22 +373,11 @@ function walkNode(node: Element | null): any[] {
                 
                 if (isChildFence) {
                     const char = child.textContent || "";
-                    
-                    // Determine if it's an opener, closer, or ambiguous
-                    const isOpener = ['(', '[', '{', '\u27E8', '\u2016'].includes(char) || char === 'l'; // 'l' unlikely but safe
+                    const isOpener = ['(', '[', '{', '\u27E8', '\u2016'].includes(char) || char === 'l';
                     const isCloser = [')', ']', '}', '\u27E9'].includes(char);
-                    // Add \u2223 (divides) to ambiguous list, as KaTeX uses it for |
                     const isAmbiguous = ['|', '\u2016', '.', '\u2223'].includes(char);
                     
-                    // Special handling for explicit KaTeX fence attribute
-                    // If fence="true", trust it?
-                    // KaTeX often marks both ( and ) as fence="true".
-                    
-                    // Logic for ambiguous (like |):
-                    // If stack top is same char, treat as closer. Else opener.
-                    // For '.', it's usually empty placeholder. Treated as ambiguous/closer?
-                    
-                    let action = 'text'; // default
+                    let action = 'text';
                     
                     if (isOpener) action = 'open';
                     else if (isCloser) action = 'close';
@@ -306,12 +389,9 @@ function walkNode(node: Element | null): any[] {
                         }
                     }
 
-                    // Handle Mismatched Close:
-                    // If we have ')' but stack top is '|', maybe we should close '|' first?
                     if (action === 'close' && stack.length > 0) {
                         const top = stack[stack.length - 1];
                         if (!isPair(top.openChar, char) && !isAmbiguous) {
-                            // Look down the stack
                             let found = false;
                             for (let j = stack.length - 1; j >= 0; j--) {
                                 if (isPair(stack[j].openChar, char)) {
@@ -320,21 +400,17 @@ function walkNode(node: Element | null): any[] {
                                 }
                             }
                             if (found) {
-                                // Close everything up to the match
                                 while (stack.length > 0) {
                                     const currentTop = stack[stack.length - 1];
                                     if (isPair(currentTop.openChar, char)) {
-                                        // Found match, standard close will handle it
                                         break;
                                     } else {
-                                        // Auto-close mismatched inner fence
                                         stack.pop();
                                         const delim = new MathDelimiter(
                                             walkChildren(currentTop.children), 
                                             normalizeFence(currentTop.openChar), 
-                                            "" // Auto-close with empty
+                                            ""
                                         );
-                                        // Add to new top (or result)
                                         if (stack.length > 0) {
                                             stack[stack.length - 1].children.push(delim);
                                         } else {
@@ -363,7 +439,6 @@ function walkNode(node: Element | null): any[] {
                                 result.push(delim);
                             }
                         } else {
-                            // Unmatched close fence, treat as text
                              result.push(...walkNode(child));
                         }
                     } else {
@@ -371,7 +446,6 @@ function walkNode(node: Element | null): any[] {
                     }
 
                 } else {
-                    // Not a fence
                     if (stack.length > 0) {
                         stack[stack.length - 1].children.push(child);
                     } else {
@@ -380,13 +454,12 @@ function walkNode(node: Element | null): any[] {
                 }
             }
 
-            // Close any remaining open fences (e.g. cases { ...)
             while (stack.length > 0) {
                 const top = stack.pop()!;
                 const delim = new MathDelimiter(
                     walkChildren(top.children), 
                     normalizeFence(top.openChar), 
-                    "" // Auto-close with empty
+                    ""
                 );
                 if (stack.length > 0) {
                     stack[stack.length - 1].children.push(delim);
@@ -394,143 +467,120 @@ function walkNode(node: Element | null): any[] {
                     result.push(delim);
                 }
             }
-
-            // Post-processing for N-ary operators (Integrals/Sums) to greedily consume next terms
-            // This fixes the "extra space" issue by putting the operand INSIDE the N-ary element
-            
-            // NOTE: Disabled greedy consumption as it caused issues with \frac and removed desired spaces
-            /*
-            for (let i = 0; i < result.length; i++) {
-                ...
-            }
-            */
-
             return result;
         }
         
         case "mfenced": {
-            // Native MathML fenced element
             const open = node.getAttribute("open") || "(";
             const close = node.getAttribute("close") || ")";
             return [new MathDelimiter(walkChildren(children), open, close)];
         }
 
-        case "mi":
+        case "mi": {
+            const text = node.textContent || "";
+            return [new ExtendedMathRun(text, false, false)];
+        }
         case "mn":
         case "mtext":
         case "ms": {
             const text = node.textContent || "";
-            return [new ExtendedMathRun(text, false)];
+            return [new ExtendedMathRun(text, false, true)];
         }
 
         case "mo": {
             const text = node.textContent || "";
-            return [new ExtendedMathRun(text, true)];
+            return [new ExtendedMathRun(text, true, false)];
         }
         
         case "mfrac": {
             const [num, den] = children;
             if (!num || !den) return walkChildren(children);
-            return [new MathFraction({
+            return [applyCtrlPr(new MathFraction({
                 numerator: walkNode(num),
                 denominator: walkNode(den)
-            })];
+            }), "m:fPr")];
         }
         
         case "msup": {
             const [base, sup] = children;
             if (!base || !sup) return walkChildren(children);
-            return [new MathSuperScript({
+            return [applyCtrlPr(new MathSuperScript({
                 children: walkNode(base),
                 superScript: walkNode(sup)
-            })];
+            }), "m:supPr")];
         }
         
         case "msub": {
             const [base, sub] = children;
             if (!base || !sub) return walkChildren(children);
-            return [new MathSubScript({
+            return [applyCtrlPr(new MathSubScript({
                 children: walkNode(base),
                 subScript: walkNode(sub)
-            })];
+            }), "m:subPr")];
         }
         
         case "msubsup": {
             const [base, sub, sup] = children;
             if (!base || !sub || !sup) return walkChildren(children);
-            
-            // Check if base is an operator (integral, sum) to use MathNary
-            // Extract text from base even if it is nested (e.g. <mrow><mo>∫</mo></mrow>)
             const baseText = extractText(base) || "";
             
-            if (isIntegral(baseText)) {
-                return [new MathNary({
+            if (isIntegral(baseText) || isSum(baseText)) {
+                return [applyCtrlPr(new MathNary({
                     char: baseText,
-                    limitLocation: "subSup", // Integrals usually have limits to the right
-                    subScript: walkNode(sub),
-                    superScript: walkNode(sup),
-                    children: [] // Empty body
-                })];
-            }
-            if (isSum(baseText)) {
-                return [new MathNary({
-                    char: baseText,
-                    limitLocation: "subSup", // Inline sums have limits to the right
+                    limitLocation: "subSup",
                     subScript: walkNode(sub),
                     superScript: walkNode(sup),
                     children: []
-                })];
+                }), "m:naryPr")];
             }
-            return [new MathSubSuperScript({
+            return [applyCtrlPr(new MathSubSuperScript({
                 children: walkNode(base),
                 subScript: walkNode(sub),
                 superScript: walkNode(sup)
-            })];
+            }), "m:subSupPr")];
         }
         
         case "msqrt": {
-            return [new MathRadical({
+            return [applyCtrlPr(new MathRadical({
                 children: walkChildren(children)
-            })];
+            }), "m:radPr")];
         }
         
         case "mroot": {
             const [base, degree] = children;
             if (!base || !degree) return walkChildren(children);
-            return [new MathRadical({
+            return [applyCtrlPr(new MathRadical({
                 children: walkNode(base),
                 degree: walkNode(degree)
-            })];
+            }), "m:radPr")];
         }
         
         case "mover": {
             const [base, over] = children;
             if (!base || !over) return walkChildren(children);
             
-            // Check for accent
-            // KaTeX often puts accent="true" on mo, or we can detect common accents
             const isAccent = over.tagName && over.tagName.toLowerCase() === 'mo' && (over.getAttribute('accent') === 'true' || isAccentChar(over.textContent || ""));
             
             if (isAccent) {
-                return [new MathAccent({
+                return [applyCtrlPr(new MathAccent({
                     children: walkNode(base),
                     accent: over.textContent || ""
-                })];
+                }), "m:accPr")];
             }
             
-            return [new MathLimitUpper({
+            return [applyCtrlPr(new MathLimitUpper({
                 children: walkNode(base),
                 limit: walkNode(over)
-            })];
+            }), "m:limUppPr")];
         }
         
         case "munder": {
             const [base, under] = children;
             if (!base || !under) return walkChildren(children);
-            return [new MathLimitLower({
+            return [applyCtrlPr(new MathLimitLower({
                 children: walkNode(base),
                 limit: walkNode(under)
-            })];
+            }), "m:limLowPr")];
         }
         
         case "munderover": {
@@ -539,55 +589,78 @@ function walkNode(node: Element | null): any[] {
             
             const baseText = extractText(base) || "";
             
-            if (isIntegral(baseText)) {
-                 return [new MathNary({
+            if (isIntegral(baseText) || isSum(baseText)) {
+                return [applyCtrlPr(new MathNary({
                     char: baseText,
-                    limitLocation: "undOvr", // Explicit over/under limits
+                    limitLocation: "undOvr",
                     subScript: walkNode(under),
                     superScript: walkNode(over),
                     children: []
-                })];
-            }
-            if (isSum(baseText)) {
-                 return [new MathNary({
-                    char: baseText,
-                    limitLocation: "undOvr", // Display sums have limits above/below
-                    subScript: walkNode(under),
-                    superScript: walkNode(over),
-                    children: []
-                })];
+                }), "m:naryPr")];
             }
             
             // Generic munderover -> nest LimitLower and LimitUpper
             // munderover(base, under, over) = LimitLower(LimitUpper(base, over), under)
-            return [new MathLimitLower({
-                children: [new MathLimitUpper({
+            return [applyCtrlPr(new MathLimitLower({
+                children: [applyCtrlPr(new MathLimitUpper({
                     children: walkNode(base),
                     limit: walkNode(over)
-                })],
+                }), "m:limUppPr")],
                 limit: walkNode(under)
-            })];
+            }), "m:limLowPr")];
         }
         
         case "mspace":
              return [new ExtendedMathRun(" ", false)]; // Approximation
 
         case "mtable": {
-            const rows = Array.from(children).map(child => {
-                // child should be mtr
-                if (child.tagName && child.tagName.toLowerCase() === "mtr") {
-                    const cells = Array.from(child.children).map(cell => {
-                        // cell should be mtd
-                        if (cell.tagName && cell.tagName.toLowerCase() === "mtd") {
-                            return new MathElement(walkNode(cell));
+            const columnalign = node.getAttribute("columnalign") || "";
+            const isAligned = columnalign.includes("right left") || columnalign.includes("left right");
+
+            if (isAligned) {
+                const rows = Array.from(children).map(child => {
+                    if (child.tagName && child.tagName.toLowerCase() === "mtr") {
+                        const rowChildren: any[] = [];
+                        const cells = Array.from(child.children);
+                        for (let i = 0; i < cells.length; i++) {
+                            const cell = cells[i];
+                            if (cell.tagName && cell.tagName.toLowerCase() === "mtd") {
+                                const cellContent = walkNode(cell);
+                                rowChildren.push(...cellContent);
+                                
+                                // Insert <m:aln/> after odd columns (0-indexed: i % 2 === 0)
+                                // except if it's the last column
+                                if (i % 2 === 0 && i < cells.length - 1) {
+                                    rowChildren.push(new GenericXmlComponent("m:aln"));
+                                }
+                            }
                         }
-                        return new MathElement([]); // Empty cell fallback
-                    });
-                    return new MathMatrixRow(cells);
-                }
-                return new MathMatrixRow([]); // Empty row fallback
-            });
-            return [new MathMatrix(rows)];
+                        return new MathEqArrRow(rowChildren);
+                    }
+                    return new MathEqArrRow([]);
+                });
+                return [new MathEqArr(rows)];
+            } else {
+                const rows = Array.from(children).map(child => {
+                    // child should be mtr
+                    if (child.tagName && child.tagName.toLowerCase() === "mtr") {
+                        const cells = Array.from(child.children).map(cell => {
+                            // cell should be mtd
+                            if (cell.tagName && cell.tagName.toLowerCase() === "mtd") {
+                                let cellChildren = walkNode(cell);
+                                if (cellChildren.length === 0) {
+                                    cellChildren = [new ExtendedMathRun("\u200B", false)];
+                                }
+                                return new MathElement(cellChildren);
+                            }
+                            return new MathElement([new ExtendedMathRun("\u200B", false)]); // Empty cell fallback
+                        });
+                        return new MathMatrixRow(cells);
+                    }
+                    return new MathMatrixRow([]); // Empty row fallback
+                });
+                return [new MathMatrix(rows)];
+            }
         }
              
         default:
