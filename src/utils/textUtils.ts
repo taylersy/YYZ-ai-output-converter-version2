@@ -19,7 +19,10 @@ export function normalizeMarkdown(markdown: string): string {
     }).replace(/\u3000/g, ' ');
 
     // 1. Convert LaTeX-style inline math \( ... \) to $ ... $
-    normalized = normalized.replace(/\\\((.*?)\\\)/g, '$$$1$$');
+    normalized = normalized.replace(/\\\([\s\S]*?\\\)/g, (match) => {
+        // Replace inner newlines with space to keep it inline, or just wrap with $
+        return '$' + match.slice(2, -2) + '$';
+    });
 
     // 2. Convert LaTeX-style display math \[ ... \] to $$ ... $$
     normalized = normalized.replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$');
@@ -94,6 +97,12 @@ export function normalizeMarkdown(markdown: string): string {
             continue;
         }
         
+        // Reject lines that already contain explicit math delimiters to prevent double-wrapping
+        if (trimmed.includes('$')) {
+            resultLines.push(line);
+            continue;
+        }
+
         // Is it a bare heuristic math line?
         // Reject standard markdown features
         if (/^(#|\*|-|\d+\.|\||>)/.test(trimmed)) {
