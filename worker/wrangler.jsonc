@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "my-auth-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-03",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "auth-db",
+      "database_id": "06d84b9e-bb37-48fb-b4a2-89c0551e7924",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

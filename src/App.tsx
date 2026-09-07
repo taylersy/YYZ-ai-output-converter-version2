@@ -9,6 +9,7 @@ import { saveAs } from 'file-saver';
 import MathEditor from './components/MathEditor';
 import { generateDocx, ExportConfig } from './utils/MarkdownToDocx';
 import AuthModal from './components/AuthModal';
+import type { AuthTab } from './components/AuthModal';
 import { authService } from './utils/auth';
 import { normalizeMarkdown } from './utils/textUtils';
 import './App.css';
@@ -112,6 +113,7 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
   const [showConfig, setShowConfig] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMessage, setAuthModalMessage] = useState('');
+  const [authModalInitialTab, setAuthModalInitialTab] = useState<AuthTab>('login');
   const [isConverting, setIsConverting] = useState(false);
   
   const [exportConfig, setExportConfig] = useState<ExportConfig>({
@@ -139,6 +141,7 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
     const token = authService.getToken();
     if (!token) {
       setAuthModalMessage('请先登录或注册以使用下载功能');
+      setAuthModalInitialTab('login');
       setShowAuthModal(true);
       return;
     }
@@ -147,9 +150,12 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
     try {
       const permission = await authService.checkPermission();
       if (!permission.allowed) {
-        alert('您的会员已过期或无效，请重新验证');
-        authService.clearToken();
-        setAuthModalMessage('您的会员已过期或无效，请重新登录');
+        const isExpired = permission.reason === 'expired';
+        if (!isExpired) authService.clearToken();
+        setAuthModalMessage(isExpired
+          ? '您的免费使用期已到期，请输入新的邀请码续期 30 天'
+          : '登录状态已失效，请重新登录');
+        setAuthModalInitialTab(isExpired ? 'redeem' : 'login');
         setShowAuthModal(true);
         setIsConverting(false);
         return;
@@ -323,6 +329,7 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
           onClose={() => setShowAuthModal(false)} 
           onSuccess={() => handleDownload()} 
           initialMessage={authModalMessage}
+          initialTab={authModalInitialTab}
         />
       )}
 
