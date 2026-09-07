@@ -14,6 +14,9 @@ dist-ssr
 *.local
 invite-codes-*.csv
 invite-codes-*.sql
+invite-manager-credentials-*.txt
+.invite-admin-token
+.invite-claim-secret
 
 # Editor directories and files
 .vscode/*

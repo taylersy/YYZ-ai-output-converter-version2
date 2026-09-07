@@ -22,3 +22,14 @@ CREATE TABLE IF NOT EXISTS user_invites (
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (invite_code) REFERENCES invite_codes(code)
 );
+
+CREATE TABLE IF NOT EXISTS invite_claims (
+  claim_id TEXT PRIMARY KEY,
+  invite_code TEXT NOT NULL UNIQUE,
+  claimed_at DATETIME NOT NULL,
+  last_seen_at DATETIME NOT NULL,
+  FOREIGN KEY (invite_code) REFERENCES invite_codes(code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_invite_claims_claimed_at
+ON invite_claims(claimed_at DESC);

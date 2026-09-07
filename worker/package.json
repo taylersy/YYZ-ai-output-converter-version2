@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260903.1",
+    "qrcode": "^1.5.4",
     "typescript": "^5.5.3",
     "wrangler": "^4.87.0"
   }

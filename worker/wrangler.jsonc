@@ -2,7 +2,14 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "my-auth-backend",
   "main": "src/index.ts",
-  "compatibility_date": "2026-05-03",
+	"compatibility_date": "2026-05-03",
+	"rules": [
+		{
+			"type": "Text",
+			"globs": ["**/*.svg"],
+			"fallthrough": true
+		}
+	],
   "d1_databases": [
     {
       "binding": "DB",
