@@ -528,3 +528,7 @@ body {
     min-height: 500px;
   }
 }
+
+.config-modal { max-height: 85vh; overflow-y: auto; }
+.config-modal .config-section { margin-bottom: 1rem; }
+.config-hint { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6; }

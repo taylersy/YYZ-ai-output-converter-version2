@@ -13,7 +13,7 @@ import {
     WidthType,
     convertInchesToTwip,
 } from "docx";
-import { convertLatexToMath, MathParagraph, globalMathConfig } from "./DocxMathConverter";
+import { createMathConverter, MathParagraph } from "./DocxMathConverter";
 import { normalizeMarkdown } from "./textUtils";
 
 // Helper to normalize AI/User input for better compatibility
@@ -40,27 +40,54 @@ export interface ExportConfig {
         eastAsia: string; // Chinese font
     };
     mathFont: string;     // Math font (e.g. Times New Roman, Cambria Math)
-    mathFontSize: number; // Math font size
+    mathFontSize: number; // Formula base size in points
+    mathItalic: boolean;  // Default variable style; explicit LaTeX styles take priority
     lineSpacing: number; // Multiplier (e.g., 1.5)
     fontSize: number;    // Point size (e.g., 12)
+}
+
+export const DEFAULT_EXPORT_CONFIG: ExportConfig = {
+    mainFont: { ascii: "Times New Roman", eastAsia: "SimSun" },
+    mathFont: "Times New Roman", mathFontSize: 12, mathItalic: true,
+    lineSpacing: 1.5, fontSize: 12,
+};
+
+export function resolveExportConfig(config?: Partial<ExportConfig>): ExportConfig {
+    const size = (value: number | undefined, fallback: number) =>
+        Number.isFinite(value) ? Math.min(72, Math.max(8, Math.round(value! * 2) / 2)) : fallback;
+    const spacing = config?.lineSpacing;
+    return {
+        ...DEFAULT_EXPORT_CONFIG, ...config,
+        mainFont: {
+            ascii: config?.mainFont?.ascii?.trim() || DEFAULT_EXPORT_CONFIG.mainFont.ascii,
+            eastAsia: config?.mainFont?.eastAsia?.trim() || DEFAULT_EXPORT_CONFIG.mainFont.eastAsia,
+        },
+        mathFont: config?.mathFont?.trim() || DEFAULT_EXPORT_CONFIG.mathFont,
+        mathFontSize: size(config?.mathFontSize, DEFAULT_EXPORT_CONFIG.mathFontSize),
+        fontSize: size(config?.fontSize, DEFAULT_EXPORT_CONFIG.fontSize),
+        mathItalic: config?.mathItalic ?? DEFAULT_EXPORT_CONFIG.mathItalic,
+        lineSpacing: typeof spacing === "number" && Number.isFinite(spacing) && spacing > 0 ? spacing : DEFAULT_EXPORT_CONFIG.lineSpacing,
+    };
+}
+
+function bodyFont(config: ExportConfig) {
+    return { ...config.mainFont, hAnsi: config.mainFont.ascii, cs: config.mainFont.ascii };
+}
+
+function finalMathFont(config: ExportConfig) {
+    return { ascii: config.mathFont, hAnsi: config.mathFont, cs: config.mathFont, eastAsia: config.mainFont.eastAsia };
 }
 
 export async function generateDocx(markdown: string, config?: Partial<ExportConfig>): Promise<Blob> {
     const cleanMarkdown = normalizeMarkdown(markdown);
     
-    // Default Settings
-    const defaultConfig: ExportConfig = {
-        mainFont: { ascii: "Times New Roman", eastAsia: "SimSun" },
-        mathFont: "Times New Roman",
-        mathFontSize: 12,
-        lineSpacing: 1.5,
-        fontSize: 12
-    };
-    const finalConfig = { ...defaultConfig, ...config };
-
-    // Set global math config for DocxMathConverter
-    globalMathConfig.fontName = finalConfig.mathFont;
-    globalMathConfig.fontSize = finalConfig.mathFontSize;
+    const finalConfig = resolveExportConfig(config);
+    const mathConverter = createMathConverter({
+        fontName: finalConfig.mathFont,
+        fontSize: finalConfig.mathFontSize,
+        italic: finalConfig.mathItalic,
+        eastAsiaFont: finalConfig.mainFont.eastAsia,
+    });
 
     // 240 twips = 1 line (single spacing). But in docx, line rule "auto" takes 240 as 100% (1 line).
     // Actually, "auto" means 240 = 1 line. So 360 = 1.5 lines.
@@ -72,10 +99,7 @@ export async function generateDocx(markdown: string, config?: Partial<ExportConf
             default: {
                 document: {
                     run: {
-                        font: {
-                            ascii: finalConfig.mainFont.ascii,
-                            eastAsia: finalConfig.mainFont.eastAsia,
-                        },
+                        font: bodyFont(finalConfig),
                         size: fontSizeHalfPoints,
                         color: "000000",
                     },
@@ -95,10 +119,7 @@ export async function generateDocx(markdown: string, config?: Partial<ExportConf
                     next: "Normal",
                     quickFormat: true,
                     run: {
-                        font: {
-                            ascii: finalConfig.mainFont.ascii,
-                            eastAsia: finalConfig.mainFont.eastAsia,
-                        },
+                        font: bodyFont(finalConfig),
                         size: 32, // 16pt - Keep headings larger/fixed or relative? User asked for "正文" customization.
                         // Usually headings should match the font family but have their own sizes.
                         // I will respect the requested font family for headings too, but keep sizes fixed as per previous "perfect" version logic unless asked otherwise.
@@ -122,10 +143,7 @@ export async function generateDocx(markdown: string, config?: Partial<ExportConf
                     next: "Normal",
                     quickFormat: true,
                     run: {
-                        font: {
-                            ascii: finalConfig.mainFont.ascii,
-                            eastAsia: finalConfig.mainFont.eastAsia,
-                        },
+                        font: bodyFont(finalConfig),
                         size: 28, // 14pt
                         bold: true,
                         italics: false,
@@ -145,10 +163,7 @@ export async function generateDocx(markdown: string, config?: Partial<ExportConf
                     next: "Normal",
                     quickFormat: true,
                     run: {
-                        font: {
-                            ascii: finalConfig.mainFont.ascii,
-                            eastAsia: finalConfig.mainFont.eastAsia,
-                        },
+                        font: bodyFont(finalConfig),
                         size: 24, // 12pt
                         bold: true,
                         italics: false,
@@ -168,10 +183,7 @@ export async function generateDocx(markdown: string, config?: Partial<ExportConf
                     next: "Normal",
                     quickFormat: true,
                     run: {
-                        font: {
-                            ascii: finalConfig.mainFont.ascii,
-                            eastAsia: finalConfig.mainFont.eastAsia,
-                        },
+                        font: bodyFont(finalConfig),
                         size: 24, // 12pt
                         bold: true,
                         italics: false,
@@ -191,10 +203,7 @@ export async function generateDocx(markdown: string, config?: Partial<ExportConf
                     next: "Normal",
                     quickFormat: true,
                     run: {
-                        font: {
-                            ascii: finalConfig.mainFont.ascii,
-                            eastAsia: finalConfig.mainFont.eastAsia,
-                        },
+                        font: bodyFont(finalConfig),
                         size: 24, // 12pt
                         bold: true,
                         italics: false,
@@ -214,10 +223,7 @@ export async function generateDocx(markdown: string, config?: Partial<ExportConf
                     next: "Normal",
                     quickFormat: true,
                     run: {
-                        font: {
-                            ascii: finalConfig.mainFont.ascii,
-                            eastAsia: finalConfig.mainFont.eastAsia,
-                        },
+                        font: bodyFont(finalConfig),
                         size: 24, // 12pt
                         bold: true,
                         italics: false,
@@ -243,14 +249,17 @@ export async function generateDocx(markdown: string, config?: Partial<ExportConf
                     }
                 }
             },
-            children: parseMarkdown(cleanMarkdown, finalConfig),
+            children: parseMarkdown(cleanMarkdown, finalConfig, mathConverter.convertLatexToMath),
         }],
     });
 
+    doc.Settings.addChildElement(mathConverter.documentProperties);
     return await Packer.toBlob(doc);
 }
 
-function parseMarkdown(markdown: string, config: ExportConfig): any[] {
+type ConvertMath = ReturnType<typeof createMathConverter>["convertLatexToMath"];
+
+function parseMarkdown(markdown: string, config: ExportConfig, convertMath: ConvertMath): any[] {
     const lines = markdown.split('\n');
     const children: any[] = [];
     let currentParagraphLines: string[] = [];
@@ -269,14 +278,11 @@ function parseMarkdown(markdown: string, config: ExportConfig): any[] {
         if (options.italic !== undefined) inlineOptions.italics = options.italic;
         
         // Use config for font and size
-        inlineOptions.font = {
-            ascii: config.mainFont.ascii,
-            eastAsia: config.mainFont.eastAsia
-        };
-        inlineOptions.size = Math.round(config.fontSize * 2);
+        inlineOptions.font = bodyFont(config);
+        if (!options.headingLevel) inlineOptions.size = Math.round(config.fontSize * 2);
 
         const paragraphOptions: any = {
-            children: parseInline(text, inlineOptions),
+            children: parseInline(text, inlineOptions, convertMath),
             heading: options.headingLevel
         };
 
@@ -333,7 +339,7 @@ function parseMarkdown(markdown: string, config: ExportConfig): any[] {
             i--; // Adjust index back
 
             if (tableLines.length >= 2) {
-                children.push(createTable(tableLines, config));
+                children.push(createTable(tableLines, config, convertMath));
             }
             continue;
         }
@@ -361,13 +367,14 @@ function parseMarkdown(markdown: string, config: ExportConfig): any[] {
             }
 
             if (mathContent.trim()) {
-                const mathNodes = convertLatexToMath(mathContent.trim(), true);
+                const mathNodes = convertMath(mathContent.trim(), true);
                 
                 // We must use m:oMathPara for block math to ensure compatibility with WPS Office
                 // and strict OMML parsers.
                 
                 children.push(new Paragraph({
                     alignment: AlignmentType.CENTER,
+                    run: { font: finalMathFont(config), size: Math.round(config.mathFontSize * 2) },
                     children: [new MathParagraph(mathNodes)],
                     spacing: { before: 240, after: 240 }
                 }));
@@ -393,15 +400,12 @@ function parseMarkdown(markdown: string, config: ExportConfig): any[] {
             } else {
                 // Bullet list
                 const inlineOptions: any = {
-                    font: {
-                        ascii: config.mainFont.ascii,
-                        eastAsia: config.mainFont.eastAsia
-                    },
+                    font: bodyFont(config),
                     size: Math.round(config.fontSize * 2)
                 };
 
                 children.push(new Paragraph({
-                    children: parseInline(content, inlineOptions),
+                    children: parseInline(content, inlineOptions, convertMath),
                     bullet: { level: 0 },
                     spacing: {
                         line: Math.round(config.lineSpacing * 240),
@@ -432,7 +436,7 @@ function parseMarkdown(markdown: string, config: ExportConfig): any[] {
     return children;
 }
 
-function createTable(tableLines: string[], config: ExportConfig) {
+function createTable(tableLines: string[], config: ExportConfig, convertMath: ConvertMath) {
     const rows: TableRow[] = [];
     
     // Parse header and body
@@ -471,7 +475,7 @@ function createTable(tableLines: string[], config: ExportConfig) {
     };
 
     const fontOptions = {
-        font: config.mainFont,
+        font: bodyFont(config),
         size: Math.round(config.fontSize * 2)
     };
 
@@ -482,7 +486,7 @@ function createTable(tableLines: string[], config: ExportConfig) {
             children: headerCells.map(text => {
                 return new TableCell({
                     children: [new Paragraph({
-                        children: parseInline(text, { bold: true, ...fontOptions }),
+                        children: parseInline(text, { bold: true, ...fontOptions }, convertMath),
                         alignment: AlignmentType.CENTER
                     })],
                     borders: {
@@ -503,7 +507,7 @@ function createTable(tableLines: string[], config: ExportConfig) {
         rows.push(new TableRow({
             children: bodyCells.map(text => new TableCell({
                 children: [new Paragraph({
-                    children: parseInline(text, fontOptions),
+                    children: parseInline(text, fontOptions, convertMath),
                     alignment: AlignmentType.CENTER
                 })],
                 borders: {
@@ -539,7 +543,7 @@ function parseInline(text: string, options: {
     italics?: boolean,
     size?: number,
     font?: { ascii: string, eastAsia: string }
-} = {}): (TextRun | DocxMath)[] {
+}, convertMath: ConvertMath): (TextRun | DocxMath)[] {
     const parts: (TextRun | DocxMath)[] = [];
     const regex = /(\*\*.*?\*\*|\*.*?\*|\$[^\$]+\$|<br\s*\/?>)/g;
     
@@ -563,19 +567,19 @@ function parseInline(text: string, options: {
             // Found bold marker. Recurse into content with bold=true
             const innerContent = part.slice(2, -2);
             // Preserve other options (size, font) and set bold=true
-            const innerParts = parseInline(innerContent, { ...options, bold: true });
+            const innerParts = parseInline(innerContent, { ...options, bold: true }, convertMath);
             parts.push(...innerParts);
         } else if (part.startsWith('*')) {
             // Found italic marker. Recurse into content with italics=true
             const innerContent = part.slice(1, -1);
-            const innerParts = parseInline(innerContent, { ...options, italics: true });
+            const innerParts = parseInline(innerContent, { ...options, italics: true }, convertMath);
             parts.push(...innerParts);
         } else if (part.startsWith('$')) {
             const latex = part.slice(1, -1);
             if (latex.trim() === "") {
                  // Empty math, ignore
             } else {
-                const mathNodes = convertLatexToMath(latex, false);
+                const mathNodes = convertMath(latex, false);
                 parts.push(new DocxMath({ children: mathNodes }));
             }
         } else if (part.match(/^<br\s*\/?>$/)) {

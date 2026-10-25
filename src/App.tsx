@@ -7,7 +7,7 @@ import rehypeRaw from 'rehype-raw';
 import 'katex/dist/katex.min.css';
 import { saveAs } from 'file-saver';
 import MathEditor from './components/MathEditor';
-import { generateDocx, ExportConfig } from './utils/MarkdownToDocx';
+import { generateDocx, ExportConfig, resolveExportConfig } from './utils/MarkdownToDocx';
 import AuthModal from './components/AuthModal';
 import type { AuthTab } from './components/AuthModal';
 import { authService } from './utils/auth';
@@ -116,16 +116,7 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
   const [authModalInitialTab, setAuthModalInitialTab] = useState<AuthTab>('login');
   const [isConverting, setIsConverting] = useState(false);
   
-  const [exportConfig, setExportConfig] = useState<ExportConfig>({
-    mainFont: {
-      ascii: 'Times New Roman',
-      eastAsia: 'SimSun' // 宋体
-    },
-    mathFont: 'Times New Roman',
-    mathFontSize: 12,
-    lineSpacing: 1.5,
-    fontSize: 12
-  });
+  const [exportConfig, setExportConfig] = useState<ExportConfig>(() => resolveExportConfig());
 
   const handleInsertMath = (latex: string) => {
     setMarkdown(prev => prev + latex);
@@ -205,8 +196,9 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
           <div className="modal-content config-modal" onClick={e => e.stopPropagation()}>
             <h2>导出设置</h2>
             <div className="config-section">
-              <label>中文字体</label>
+              <label htmlFor="export-chinese-font">中文字体</label>
               <select 
+                id="export-chinese-font"
                 value={exportConfig.mainFont.eastAsia}
                 onChange={(e) => setExportConfig({
                   ...exportConfig,
@@ -221,9 +213,10 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
               </select>
             </div>
             
-            <div className="setting-item">
-                <label>英文字体：</label>
+            <div className="config-section">
+                <label htmlFor="export-english-font">英文字体</label>
                 <select 
+                  id="export-english-font"
                   value={exportConfig.mainFont.ascii}
                   onChange={(e) => setExportConfig({
                     ...exportConfig,
@@ -236,26 +229,38 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
                 </select>
               </div>
 
-              <div className="setting-item">
-                <label>公式字体：</label>
+              <div className="config-section">
+                <label htmlFor="export-math-font">公式字体</label>
                 <select 
+                  id="export-math-font"
                   value={exportConfig.mathFont}
                   onChange={(e) => setExportConfig({
                     ...exportConfig,
                     mathFont: e.target.value
                   })}
                 >
-                  <option value="Times New Roman">Times New Roman (推荐)</option>
-                  <option value="Cambria Math">Cambria Math (默认)</option>
+                  <option value="Times New Roman">Times New Roman（新罗马，推荐）</option>
+                  <option value="Cambria Math">Cambria Math</option>
                   <option value="XITS Math">XITS Math</option>
                   <option value="Latin Modern Math">Latin Modern Math</option>
                 </select>
               </div>
 
-              <div className="setting-item">
-                <label>公式字号(pt)：</label>
+              <div className="config-section">
+                <label htmlFor="export-math-style">公式变量字形</label>
+                <select id="export-math-style" value={exportConfig.mathItalic ? 'italic' : 'upright'}
+                  onChange={e => setExportConfig({ ...exportConfig, mathItalic: e.target.value === 'italic' })}>
+                  <option value="italic">斜体（推荐）</option>
+                  <option value="upright">正体</option>
+                </select>
+              </div>
+
+              <div className="config-section">
+                <label htmlFor="export-math-size">公式字号（pt）</label>
                 <input 
-                  type="number" 
+                  type="number"
+                  id="export-math-size"
+                  onBlur={() => setExportConfig(resolveExportConfig(exportConfig))}
                   value={exportConfig.mathFontSize}
                   onChange={(e) => setExportConfig({
                     ...exportConfig,
@@ -267,9 +272,10 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
                 />
               </div>
 
-              <div className="setting-item">
-                <label>行距：</label>
+              <div className="config-section">
+                <label htmlFor="export-line-spacing">行距</label>
               <select 
+                id="export-line-spacing"
                 value={exportConfig.lineSpacing}
                 onChange={(e) => setExportConfig({
                   ...exportConfig,
@@ -284,8 +290,9 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
             </div>
 
             <div className="config-section">
-              <label>字体大小</label>
+              <label htmlFor="export-body-size">正文字号</label>
               <select 
+                id="export-body-size"
                 value={exportConfig.fontSize}
                 onChange={(e) => setExportConfig({
                   ...exportConfig,
@@ -300,8 +307,9 @@ $$ f(x) = \\int_{-\\infty}^\\infty \\frac{e^{-x^2}}{\\sqrt{2\\pi}} dx + \\sum_{n
               </select>
             </div>
 
+            <p className="config-hint">变量字母按所选字形导出，数字、函数名和说明文字保持正体。公式字号独立于正文，上下标自动按比例缩小。</p>
             <div className="modal-actions">
-              <button className="primary-btn" onClick={() => setShowConfig(false)}>确定</button>
+              <button className="primary-btn" onClick={() => { setExportConfig(resolveExportConfig(exportConfig)); setShowConfig(false); }}>确定</button>
             </div>
           </div>
         </div>
