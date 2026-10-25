@@ -708,6 +708,11 @@ function isAccentChar(text: string): boolean {
 
 function isFence(node: Element): boolean {
     if (!node.tagName || node.tagName.toLowerCase() !== 'mo') return false;
+
+    // Ordinary parentheses stay as runs. In (t-3)^2, KaTeX puts the closing
+    // parenthesis inside msup; treating only the opening one as a stretchy
+    // delimiter would incorrectly absorb the following +3 into that group.
+    if (node.getAttribute('stretchy') === 'false') return false;
     
     // Explicit fence attribute from KaTeX
     if (node.getAttribute('fence') === 'true') return true;

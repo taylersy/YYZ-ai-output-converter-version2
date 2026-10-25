@@ -529,6 +529,11 @@ function createTable(tableLines: string[], config: ExportConfig) {
     });
 }
 
+// Markdown escapes belong to plain text; never remove backslashes from LaTeX.
+function unescapeMarkdownText(text: string): string {
+    return text.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]\^_`{|}~])/g, '$1');
+}
+
 function parseInline(text: string, options: { 
     bold?: boolean,
     italics?: boolean,
@@ -545,7 +550,7 @@ function parseInline(text: string, options: {
         // Add text before match
         if (match.index > lastIndex) {
             parts.push(new TextRun({ 
-                text: text.slice(lastIndex, match.index),
+                text: unescapeMarkdownText(text.slice(lastIndex, match.index)),
                 bold: options.bold,
                 italics: options.italics,
                 size: options.size,
@@ -583,7 +588,7 @@ function parseInline(text: string, options: {
     // Add remaining text
     if (lastIndex < text.length) {
         parts.push(new TextRun({ 
-            text: text.slice(lastIndex),
+            text: unescapeMarkdownText(text.slice(lastIndex)),
             bold: options.bold,
             italics: options.italics,
             size: options.size,

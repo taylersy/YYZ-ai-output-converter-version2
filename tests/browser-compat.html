@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Markdown compatibility regression</title>
+<link rel="stylesheet" href="/node_modules/katex/dist/katex.min.css">
+<style>body{font:16px serif;max-width:900px;margin:30px auto;line-height:1.6}#status{position:sticky;top:0;background:#eaf8ef;padding:12px;border:1px solid #86bd96}table{border-collapse:collapse;width:100%}td,th{padding:6px;border-bottom:1px solid #ccc}a{margin-left:16px}</style>
+<div id="status">Running preview and DOCX regression…</div>
+<div id="preview"></div>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
+import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
+import fixture from './fixtures/gpt-coordinate-triangle.md?raw';
+import { normalizeMarkdown } from '../src/utils/textUtils.ts';
+import { generateDocx } from '../src/utils/MarkdownToDocx.ts';
+import { assertDocx } from './docx-assertions.mjs';
+try {
+    createRoot(document.getElementById('preview')).render(React.createElement(ReactMarkdown, {
+        remarkPlugins: [remarkMath, remarkGfm], rehypePlugins: [rehypeKatex, rehypeRaw],
+    }, normalizeMarkdown(fixture)));
+    const blob = await generateDocx(fixture);
+    const docxReport = await assertDocx(blob);
+    const formulas = document.querySelectorAll('.katex').length;
+    const errors = document.querySelectorAll('.katex-error').length;
+    if (formulas !== 56 || errors !== 0) throw new Error(`formulas=${formulas}, errors=${errors}`);
+    document.getElementById('status').textContent = `PASS: ${formulas} formulas, ${errors} KaTeX errors; DOCX verified (${blob.size} bytes): ${docxReport}.`;
+    const link = document.createElement('a');
+    link.textContent = 'Download regression DOCX';
+    link.href = URL.createObjectURL(blob);
+    link.download = 'gpt-coordinate-triangle-regression.docx';
+    document.getElementById('status').append(link);
+} catch (error) {
+    document.getElementById('status').textContent = `FAIL: ${error.message}`;
+    console.error(error);
+}
+</script>
